@@ -1,5 +1,3 @@
-
-
 from flask import Flask, request, render_template_string, jsonify
 import numpy as np
 import tensorflow as tf
@@ -15,7 +13,17 @@ app = Flask(__name__)
 model = load_model("waste-classification-model.h5")
 labels = ["Compost", "Trash", "Metal", "Plastic", "Glass", "Paper"]
 
-# Store classification history (in-memory list)
+# Direction mapping per category
+direction_map = {
+    "Compost": "⬅️ Left Bin",
+    "Trash": "⬇️ Center Bin",
+    "Metal": "➡️ Right Bin",
+    "Plastic": "↙️ Left-Center Bin",
+    "Glass": "⬇️ Center Bin",
+    "Paper": "↘️ Right-Center Bin"
+}
+
+# Store classification history
 classification_history = []
 
 # Pages
@@ -45,7 +53,7 @@ CONTACT_PAGE = """
 <p>Phone: +2349031495094</p>
 """
 
-# Main UI Template with camera and history
+# Main HTML Template
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -59,7 +67,7 @@ HTML_TEMPLATE = """
     nav a:hover { text-decoration: underline; }
     #content { padding: 30px; }
     video { border: 4px solid white; border-radius: 10px; }
-    #result { margin-top: 15px; font-size: 1.5em; }
+    #result { margin-top: 15px; font-size: 1.6em; font-weight: bold; color: #00ff90; }
     .history { margin-top: 30px; text-align: center; }
     .history-item { display: inline-block; background: #263238; margin: 10px; padding: 10px; border-radius: 8px; }
     .history-item img { width: 100px; height: 100px; border-radius: 6px; border: 2px solid white; }
@@ -110,7 +118,7 @@ HTML_TEMPLATE = """
         .then(res => res.json())
         .then(data => {
           if (data.category) {
-            result.textContent = 'Detected: ' + data.category;
+            result.textContent = `Detected: ${data.category} → ${data.direction}`;
             updateHistory(data.history);
           } else {
             result.textContent = 'Error: ' + data.error;
@@ -140,7 +148,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# Image preprocessing
+# Preprocessing
 def preprocess_image(img_data):
     img = Image.open(io.BytesIO(img_data)).convert("RGB")
     img = img.resize((32, 32))
@@ -174,19 +182,21 @@ def classify():
         prediction = model.predict(img_array)
         index = int(np.argmax(prediction))
         label = labels[index] if index < len(labels) else "Unknown"
+        direction = direction_map.get(label, "⬇️ Down")
 
-        # Keep last 5 images in history
         classification_history.insert(0, {
             'image': request.json['image'],
-            'label': label,
+            'label': f"{label} ({direction})",
             'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
         if len(classification_history) > 5:
             classification_history.pop()
 
-        return jsonify({'category': label, 'history': classification_history})
+        return jsonify({'category': label, 'direction': direction, 'history': classification_history})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+
